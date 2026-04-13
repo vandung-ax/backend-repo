@@ -13,3 +13,8 @@ class LoginResponse(BaseModel):
     username: Optional[str] = None
     display_name: Optional[str] = None # Tên hiển thị (Tên SV hoặc Tên Cố vấn)
     linked_id: Optional[str] = None # Thêm trường này để lưu ID liên kết
+
+class ChangePasswordRequest(BaseModel):
+    username: str
+    old_password: str
+    new_password: str

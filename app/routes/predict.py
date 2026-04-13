@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api", tags=["Prediction & Retrain"])
 
 AI_API_URL = "https://ai-student-api.onrender.com/api/predict_batch"
 AI_RETRAIN_URL = "https://ai-student-api.onrender.com/api/retrain_end_of_semester"
-AI_CURRENT_TREE_URL = "https://ai-student-api.onrender.com/api/model/current_tree" # <-- THÊM DÒNG NÀY
+AI_CURRENT_TREE_URL = "https://ai-student-api.onrender.com/api/model/current_tree"
 
 @router.post("/upload-predict")
 async def upload_and_predict(
@@ -41,16 +41,44 @@ async def upload_and_predict(
     missing_cols = [c for c in feature_columns if c not in df.columns]
     if missing_cols:
         raise HTTPException(status_code=400, detail=f"File thiếu các cột: {missing_cols}")
+        
+    # --- PHẦN ĐÃ SỬA: Xử lý giá trị rỗng (NaN) linh hoạt theo loại dữ liệu ---
+    numeric_cols = ["Attendance", "Hours_Studied", "Previous_Scores", "Sleep_Hours"]
+    text_cols = [
+        "Access_to_Resources", "Motivation_Level", "Family_Income", 
+        "Peer_Influence", "Distance_from_Home", "Extracurricular_Activities", "Teacher_Quality"
+    ]
+    
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = df[col].fillna(0)
+            
+    for col in text_cols:
+        if col in df.columns:
+            df[col] = df[col].fillna("Unknown")
+            
+    # Đảm bảo các cột text chắc chắn là kiểu chuỗi (string)
+    df[text_cols] = df[text_cols].astype(str)
+    # --------------------------------------------------------------------------
 
     records_to_send = df[feature_columns].to_dict(orient="records")
 
+    # Bắt lỗi chi tiết từ máy chủ AI
     try:
-        response = requests.post(AI_API_URL, json=records_to_send, timeout=60)
+        response = requests.post(AI_API_URL, json=records_to_send, timeout=120)
+        
         if response.status_code != 200:
-            raise HTTPException(status_code=500, detail="Lỗi phản hồi từ API Dự báo AI")
+            ai_error_detail = response.text 
+            raise HTTPException(status_code=500, detail=f"AI Server báo lỗi ({response.status_code}): {ai_error_detail}")
+            
         ai_data = response.json()
+        
+    except requests.exceptions.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi đường truyền tới AI: {str(e)}")
+    except HTTPException:
+        raise 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Không thể kết nối API Dự báo: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Lỗi Backend nội bộ: {str(e)}")
 
     try:
         # CHỈ DỰ BÁO: Cây ép thành "[]"

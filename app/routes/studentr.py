@@ -23,32 +23,34 @@ def get_all_students(db: Session = Depends(get_db)):
 
 @router.post("/add")
 def add_student(data: StudentCreate, db: Session = Depends(get_db)):
-    # 1. Kiểm tra trùng MSSV
+    # 1. Kiểm tra xem MSSV đã tồn tại trong bảng SinhVien chưa
     if db.query(SinhVien).filter(SinhVien.MSSV == data.MSSV).first():
-        raise HTTPException(status_code=400, detail="MSSV đã tồn tại trong hệ thống")
+        raise HTTPException(status_code=400, detail="MSSV đã tồn tại trong hệ thống!")
 
-    # 2. Thêm Sinh viên
-    new_sv = SinhVien(MSSV=data.MSSV, HoTen=data.HoTen, MaKhoa=data.MaKhoa, Nganh=data.Nganh)
-    db.add(new_sv)
-    db.flush()
+    # 2. Kiểm tra xem Tài Khoản đã tồn tại chưa (đề phòng lỗi rác từ trước)
+    if db.query(TaiKhoan).filter(TaiKhoan.username == data.username).first():
+        raise HTTPException(status_code=400, detail=f"Tài khoản đăng nhập '{data.username}' đã có người sử dụng!")
 
-    # 3. Tạo Tài khoản liên kết
-    new_acc = TaiKhoan(username=data.username, password=data.password, role="sinhvien", MSSV_LienKet=data.MSSV)
-    db.add(new_acc)
-    db.commit()
-    return {"status": "success"}
-
-@router.put("/update/{mssv}")
-def update_student(mssv: str, data: dict, db: Session = Depends(get_db)):
-    sv = db.query(SinhVien).filter(SinhVien.MSSV == mssv).first()
-    if not sv: raise HTTPException(status_code=404)
-    
-    sv.HoTen = data.get('HoTen', sv.HoTen)
-    sv.MaKhoa = data.get('MaKhoa', sv.MaKhoa)
-    sv.Nganh = data.get('Nganh', sv.Nganh)
-    db.commit()
-    return {"status": "success"}
-
+    try:
+        # 3. CHỈ THÊM SINH VIÊN (Tuyệt đối không code phần thêm TaiKhoan ở đây)
+        new_sv = SinhVien(
+            MSSV=data.MSSV,
+            HoTen=data.HoTen,
+            MaKhoa=data.MaKhoa,
+            Nganh=data.Nganh,
+            MaLop=data.Lop,
+        )
+        db.add(new_sv)
+        
+        # 4. Lệnh commit() này sẽ chốt giao dịch. 
+        # Ngay lúc này, MySQL sẽ nhận dữ liệu SinhVien -> kích hoạt Trigger -> tự động lưu thêm TaiKhoan.
+        db.commit()
+        
+        return {"status": "success"}
+        
+    except Exception as e:
+        db.rollback() # Nếu có lỗi gì khác, hủy thao tác để bảo vệ DB
+        raise HTTPException(status_code=500, detail=f"Lỗi cơ sở dữ liệu: {str(e)}")
 @router.delete("/delete/{mssv}")
 def delete_student(mssv: str, db: Session = Depends(get_db)):
     sv = db.query(SinhVien).filter(SinhVien.MSSV == mssv).first()

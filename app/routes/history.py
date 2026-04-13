@@ -15,11 +15,12 @@ router = APIRouter(prefix="/api", tags=["History Data"])
 @router.get("/data/all-results")
 def get_all_results(user_id: Optional[int] = None, scope: Optional[str] = "khoa", db: Session = Depends(get_db)):
     query = db.query(
-        SinhVien, RiskThresholds, RiskFeatures, PredictionBatches
+        SinhVien, RiskThresholds, RiskFeatures, PredictionBatches,Lop, CoVan
     ).outerjoin(RiskThresholds, SinhVien.MSSV == RiskThresholds.MSSV)\
      .outerjoin(RiskFeatures, SinhVien.MSSV == RiskFeatures.MSSV)\
-     .outerjoin(PredictionBatches, RiskThresholds.batch_id == PredictionBatches.id)
-
+     .outerjoin(PredictionBatches, RiskThresholds.batch_id == PredictionBatches.id)\
+     .outerjoin(Lop, SinhVien.MaLop == Lop.MaLop)\
+     .outerjoin(CoVan, Lop.Id_CoVan == CoVan.Id_CoVan) # <--- SỬA DÒNG NÀY: Dùng Lop.Id_CoVan thay vì SinhVien.Id_CoVan
     if user_id:
         user = db.query(TaiKhoan).filter(TaiKhoan.id == user_id).first()
         if user:
@@ -35,31 +36,40 @@ def get_all_results(user_id: Optional[int] = None, scope: Optional[str] = "khoa"
                             query = query.filter(SinhVien.MaLop == 'NONE_ASSIGNED')
                     else:
                         query = query.filter(SinhVien.MaKhoa == covan.MaKhoa)
+            elif user.role == "sinhvien":
+                query = query.filter(SinhVien.MSSV == user.MSSV_LienKet)
 
     results = query.all()
     
+    # Bulk fetch reasons and advices to avoid N+1 problem
+    fetched_mssvs = [sv.MSSV for (sv, _, _, _, _, _) in results]
+    
+    reasons_dict = {}
+    advices_dict = {}
+    
+    if fetched_mssvs:
+        all_reasons = db.query(RiskReasons).filter(RiskReasons.MSSV.in_(fetched_mssvs)).all()
+        for r in all_reasons:
+            reasons_dict.setdefault(r.MSSV, []).append(r.reason_text)
+            
+        all_advices = db.query(Advice).filter(Advice.MSSV.in_(fetched_mssvs)).all()
+        for a in all_advices:
+            advices_dict.setdefault(a.MSSV, []).append(a.advice_text)
+    
     result_list = []
-    for sv, threshold, features, batch in results:
-        reasons_list = []
-        if threshold:
-            reasons = db.query(RiskReasons).filter(RiskReasons.MSSV == sv.MSSV).all()
-            reasons_list = [r.reason_text for r in reasons]
-            
-        # LẤY LỜI KHUYÊN TỪ DATABASE
-        advices = db.query(Advice).filter(Advice.MSSV == sv.MSSV).all()
-        advice_list = [a.advice_text for a in advices] if advices else []
-            
+    for sv, threshold, features, batch, lop, covan in results:
         result_list.append({
             "MSSV": sv.MSSV,
             "HoTen": sv.HoTen,
             "Khoa": sv.MaKhoa,
             "Lop": sv.MaLop or "Chưa xếp lớp",
             "Nganh": sv.Nganh or "Chưa xác định",
+            "TenCoVan": covan.TenCoVan if covan else "",
             "risk_score": threshold.risk_score if threshold else 0.0,
             "risk_level": threshold.risk_level if threshold else "AN TOÀN",
             "ai_explanation_path": threshold.ai_explanation_path if threshold else None,
-            "reasons": reasons_list,
-            "advices": advice_list, # <-- THÊM MẢNG LỜI KHUYÊN TRẢ VỀ CHO GIAO DIỆN
+            "reasons": reasons_dict.get(sv.MSSV, []),
+            "advices": advices_dict.get(sv.MSSV, []),
             "created_at": batch.created_at if batch else None,
             "attendance": features.Attendance if features else 0,
             "hours_studied": features.Hours_Studied if features else 0,

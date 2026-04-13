@@ -16,5 +16,6 @@ class StudentCreate(BaseModel):
     HoTen: str
     MaKhoa: str
     Nganh: str
+    Lop: str
     username: str
     password: str

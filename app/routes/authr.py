@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
 from ..models.student_risk import TaiKhoan, SinhVien, CoVan
-from ..schemas.auth import LoginRequest, LoginResponse
+from ..schemas.auth import LoginRequest, LoginResponse, ChangePasswordRequest
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
@@ -36,3 +36,21 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
         "display_name": display_name,
         "linked_id": linked_id
     }
+# Import thêm ChangePasswordRequest từ schemas
+@router.post("/change-password")
+def change_password(request: ChangePasswordRequest, db: Session = Depends(get_db)):
+    # 1. Tìm tài khoản theo username
+    user = db.query(TaiKhoan).filter(TaiKhoan.username == request.username).first()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tài khoản")
+    
+    # 2. Kiểm tra mật khẩu cũ
+    if user.password != request.old_password:
+        raise HTTPException(status_code=400, detail="Mật khẩu hiện tại không chính xác")
+    
+    # 3. Cập nhật mật khẩu mới
+    user.password = request.new_password
+    db.commit()
+    
+    return {"status": "success", "message": "Đổi mật khẩu thành công"}

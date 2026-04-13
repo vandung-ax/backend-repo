@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# Uploads & Static
+upload/
+static/
+
+# Frontend Folders (Để tách biệt khi Push Backend)
+frontend-react/
+frontend/
+node_modules/
