@@ -2,7 +2,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware # BƯỚC 1: Thêm dòng import này
 
 # SỬA DÒNG NÀY ĐỂ IMPORT CẢ 2:
-from app.routes import authr, studentr, predict, history, covanr, adminr,advicer, accountr
+from app.routes import authr, studentr, predict, history, covanr, adminr, advicer, accountr
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+from fastapi import Depends
+from app.database import get_db
+
 
 app = FastAPI()
 
@@ -28,3 +33,20 @@ app.include_router(accountr.router)
 @app.get("/")
 def root():
     return {"message": "Backend đang chạy ổn định!"}
+
+@app.get("/healthcheck")
+def healthcheck(db: Session = Depends(get_db)):
+    try:
+        # Thực hiện một truy vấn SQL cực nhẹ để giữ Aiven không bị tắt
+        db.execute(text("SELECT 1"))
+        return {
+            "status": "ok",
+            "message": "Hệ thống và Database đang hoạt động!",
+            "database": "connected"
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": "Không thể kết nối Database",
+            "error": str(e)
+        }
