@@ -13,7 +13,12 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(TaiKhoan).filter(TaiKhoan.username == request.username).first()
     
     # 2. Kiểm tra tài khoản và mật khẩu (bcrypt hash)
-    if not user or not verify_password(request.password, user.password):
+    try:
+        is_valid = verify_password(request.password, user.password) if user else False
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Bcrypt err: {str(e)} type: {type(e).__name__}")
+        
+    if not user or not is_valid:
         raise HTTPException(status_code=401, detail="Tài khoản hoặc mật khẩu không chính xác")
     
     # 3. Lấy tên hiển thị dựa trên Role
@@ -55,6 +60,7 @@ def change_password(request: ChangePasswordRequest, db: Session = Depends(get_db
     db.commit()
     
     return {"status": "success", "message": "Đổi mật khẩu thành công"}
+
 @router.get('/debug-db')
 def debug_db(db: Session = Depends(get_db)):
     import os
