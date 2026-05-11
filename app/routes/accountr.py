@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import Optional
 from app.database import get_db
 from app.models.student_risk import TaiKhoan
+from app.utils.password import hash_password
 
 router = APIRouter(prefix="/api/account", tags=["Account Management"])
 
@@ -38,7 +39,7 @@ def add_account(acc: AccountCreate, db: Session = Depends(get_db)):
     
     new_acc = TaiKhoan(
         username=acc.username,
-        password=acc.password, 
+        password=hash_password(acc.password), 
         role=acc.role,
         MSSV_LienKet=acc.MSSV_LienKet,
         Id_CoVan_LienKet=acc.Id_CoVan_LienKet
@@ -66,7 +67,7 @@ def update_account(account_id: int, acc: AccountUpdate, db: Session = Depends(ge
     
     # Chỉ cập nhật mật khẩu nếu có gửi lên (chuỗi không rỗng)
     if acc.password: 
-        db_acc.password = acc.password
+        db_acc.password = hash_password(acc.password)
         
     try:
         db.commit()
