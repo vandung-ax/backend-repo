@@ -55,3 +55,9 @@ def change_password(request: ChangePasswordRequest, db: Session = Depends(get_db
     db.commit()
     
     return {"status": "success", "message": "Đổi mật khẩu thành công"}
+@router.get('/debug-db')
+def debug_db(db: Session = Depends(get_db)):
+    import os
+    db_url = os.getenv('DATABASE_URL')
+    user = db.query(TaiKhoan).filter(TaiKhoan.username == 'admin').first()
+    return {'db_url': db_url, 'admin_hash_prefix': user.password[:10] if user and user.password else 'None'}
